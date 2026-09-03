@@ -65,20 +65,20 @@ jobs:
           flutter doctor -v
           flutter precache --windows
 
-      - name: Setup vcpkg
-        shell: pwsh
-        run: |
-          git clone https://github.com/microsoft/vcpkg C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
-          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-          echo "VCPKG_DEFAULT_TRIPLET=x64-windows-static" >> $env:GITHUB_ENV
+            - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
 
-      - name: Install FFmpeg with vcpkg
-        shell: pwsh
+      - name: Install RustDesk vcpkg dependencies
+        shell: bash
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
         run: |
-          Push-Location C:\vcpkg
-          .\vcpkg.exe install ffmpeg:x64-windows-static
-          Pop-Location
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet x64-windows-static \
+            --x-install-root="$VCPKG_ROOT/installed"
 
       - name: Build RustDesk
         shell: pwsh
