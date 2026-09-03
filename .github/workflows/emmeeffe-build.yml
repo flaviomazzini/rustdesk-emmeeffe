@@ -1,0 +1,78 @@
+name: EmmeEffe RustDesk Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Force incoming-only mode
+        shell: pwsh
+        run: |
+          $path = "libs/hbb_common/src/config.rs"
+          $content = Get-Content $path -Raw
+
+          $pattern = 'pub fn is_incoming_only\(\) -> bool \{.*?\n\}'
+          $replacement = @'
+          pub fn is_incoming_only() -> bool {
+              true
+          }
+          '@
+
+          $newContent = [regex]::Replace(
+              $content,
+              $pattern,
+              $replacement,
+              [System.Text.RegularExpressions.RegexOptions]::Singleline
+          )
+
+          Set-Content -Path $path -Value $newContent -Encoding UTF8
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.75"
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          channel: "stable"
+
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "15.0.6"
+
+      - name: Prepare Flutter
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+
+      - name: Build RustDesk
+        shell: pwsh
+        run: |
+          python build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+
+      - name: Prepare EXE
+        shell: pwsh
+        run: |
+          $src = "flutter/build/windows/x64/runner/Release"
+          $dst = "artifact"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+
+          Copy-Item "$src\rustdesk.exe" "$dst\rustdesk-host=pbxemmeeffe.dyndns.org,key=4WTIAYQnc4BddzGns6tfwJimRXsKlsKmOjjWHegNtns=.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EmmeEffe-RustDesk-Incoming-Only
+          path: artifact/*.exe
