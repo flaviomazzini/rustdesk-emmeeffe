@@ -39,6 +39,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.75"
+          components: rustfmt
+
+      - name: Verify Rust
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+          rustfmt --version
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
