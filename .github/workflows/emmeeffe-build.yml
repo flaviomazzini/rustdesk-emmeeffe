@@ -123,20 +123,44 @@ jobs:
         run: |
           python build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
-      - name: Prepare Emme Effe EXE
+           - name: Prepare RustDesk portable files
         shell: pwsh
         run: |
-          $src = "flutter/build/windows/x64/runner/Release/rustdesk.exe"
+          if (Test-Path "./rustdesk") {
+              Remove-Item "./rustdesk" -Recurse -Force
+          }
+
+          Move-Item `
+            "flutter/build/windows/x64/runner/Release" `
+            "./rustdesk"
+
+      - name: Build single portable EXE
+        shell: bash
+        run: |
+          cd libs/portable
+
+          pip3 install -r requirements.txt
+
+          python3 ./generate.py \
+            -f ../../rustdesk/ \
+            -o . \
+            -e ../../rustdesk/rustdesk.exe
+
+          cd ../..
+
+      - name: Prepare Emme Effe QuickSupport EXE
+        shell: pwsh
+        run: |
           $dst = "artifact"
 
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
 
           Copy-Item `
-            $src `
+            "target/release/rustdesk-portable-packer.exe" `
             "$dst\rustdesk-host=pbxemmeeffe.dyndns.org,key=4WTIAYQnc4BddzGns6tfwJimRXsKlsKmOjjWHegNtns=.exe"
 
-      - name: Upload Emme Effe client
+      - name: Upload Emme Effe QuickSupport
         uses: actions/upload-artifact@v4
         with:
-          name: EmmeEffe-RustDesk-Incoming-Only
+          name: EmmeEffe-RustDesk-QuickSupport
           path: artifact/*.exe
