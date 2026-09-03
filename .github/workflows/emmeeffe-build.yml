@@ -65,6 +65,19 @@ jobs:
           flutter doctor -v
           flutter precache --windows
 
+      - name: Setup vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+          echo "VCPKG_DEFAULT_TRIPLET=x64-windows-static" >> $env:GITHUB_ENV
+
+      - name: Install FFmpeg with vcpkg
+        shell: pwsh
+        run: |
+          C:\vcpkg\vcpkg.exe install ffmpeg:x64-windows-static
+
       - name: Build RustDesk
         shell: pwsh
         run: |
