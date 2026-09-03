@@ -76,7 +76,9 @@ jobs:
       - name: Install FFmpeg with vcpkg
         shell: pwsh
         run: |
-          C:\vcpkg\vcpkg.exe install ffmpeg:x64-windows-static
+          Push-Location C:\vcpkg
+          .\vcpkg.exe install ffmpeg:x64-windows-static
+          Pop-Location
 
       - name: Build RustDesk
         shell: pwsh
