@@ -65,7 +65,7 @@ jobs:
           flutter doctor -v
           flutter precache --windows
 
-            - name: Setup vcpkg
+      - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: C:\vcpkg
