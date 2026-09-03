@@ -3,15 +3,33 @@ name: EmmeEffe RustDesk Build
 on:
   workflow_dispatch:
 
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  LLVM_VERSION: "15.0.6"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+
 jobs:
+
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
   build-windows:
+    needs: generate-bridge
     runs-on: windows-2022
 
     steps:
+
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Download generated Flutter-Rust bridge
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Force incoming-only mode
         shell: pwsh
@@ -35,48 +53,68 @@ jobs:
 
           Set-Content -Path $path -Value $newContent -Encoding UTF8
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
         with:
-          toolchain: "1.75"
-          components: rustfmt
-
-      - name: Verify Rust
-        shell: pwsh
-        run: |
-          rustc --version
-          cargo --version
-          rustfmt --version
+          version: ${{ env.LLVM_VERSION }}
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.5"
-          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          architecture: x64
 
-      - name: Install LLVM
-        uses: KyleMayes/install-llvm-action@v2
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          version: "15.0.6"
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
 
-      - name: Prepare Flutter
+      - name: Install RustDesk custom Flutter engine
         shell: pwsh
         run: |
           flutter doctor -v
           flutter precache --windows
 
+          Invoke-WebRequest `
+            -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip `
+            -OutFile windows-x64-release.zip
+
+          Expand-Archive `
+            -Path windows-x64-release.zip `
+            -DestinationPath windows-x64-release
+
+          $flutterRoot = Split-Path (Split-Path (Get-Command flutter).Source)
+
+          Copy-Item `
+            "windows-x64-release\*" `
+            "$flutterRoot\bin\cache\artifacts\engine\windows-x64-release\" `
+            -Recurse -Force
+
+      - name: Patch Flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff \
+            "$(dirname "$(dirname "$(which flutter)")")/"
+
+          cd "$(dirname "$(dirname "$(which flutter)")")"
+
+          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: C:\vcpkg
-          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-      - name: Install RustDesk vcpkg dependencies
+      - name: Install RustDesk dependencies
         shell: bash
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
         run: |
-          "$VCPKG_ROOT/vcpkg" install \
+          "$VCPKG_ROOT/vcpkg" \
+            install \
             --triplet x64-windows-static \
             --x-install-root="$VCPKG_ROOT/installed"
 
@@ -85,16 +123,19 @@ jobs:
         run: |
           python build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
-      - name: Prepare EXE
+      - name: Prepare Emme Effe EXE
         shell: pwsh
         run: |
-          $src = "flutter/build/windows/x64/runner/Release"
+          $src = "flutter/build/windows/x64/runner/Release/rustdesk.exe"
           $dst = "artifact"
+
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
 
-          Copy-Item "$src\rustdesk.exe" "$dst\rustdesk-host=pbxemmeeffe.dyndns.org,key=4WTIAYQnc4BddzGns6tfwJimRXsKlsKmOjjWHegNtns=.exe"
+          Copy-Item `
+            $src `
+            "$dst\rustdesk-host=pbxemmeeffe.dyndns.org,key=4WTIAYQnc4BddzGns6tfwJimRXsKlsKmOjjWHegNtns=.exe"
 
-      - name: Upload artifact
+      - name: Upload Emme Effe client
         uses: actions/upload-artifact@v4
         with:
           name: EmmeEffe-RustDesk-Incoming-Only
