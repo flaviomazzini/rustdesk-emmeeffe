@@ -123,7 +123,7 @@ jobs:
         run: |
           python build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
-           - name: Prepare RustDesk portable files
+      - name: Prepare RustDesk portable files
         shell: pwsh
         run: |
           if (Test-Path "./rustdesk") {
