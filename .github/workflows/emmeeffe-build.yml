@@ -1,5 +1,11 @@
 name: EmmeEffe RustDesk Build
 
+# Teleassistenza Emme Effe: Windows 10/11 (Flutter) e Windows 7 (Sciter, x64).
+# Tutte le personalizzazioni sono nel sorgente del ramo, tranne quelle al submodulo
+# libs/hbb_common (codice RustDesk), applicate qui da res/emmeeffe/patch_hbb_common.ps1.
+# Risultato: artifact "EmmeEffe-Assistenza-<versione>" con
+#   EmmeEffe-Assistenza.exe (Win10/11) e EmmeEffe-Assistenza-Win7.exe (Win7) + SHA256SUMS.txt
+
 on:
   workflow_dispatch:
 
@@ -8,6 +14,9 @@ env:
   FLUTTER_VERSION: "3.24.5"
   LLVM_VERSION: "15.0.6"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  # Nome dell'exe dentro il pacchetto: decide la cartella di estrazione
+  # (%LOCALAPPDATA%\assistenza-emme-effe), uguale alle 1.5.x.
+  INNER_EXE: "Assistenza-Emme-Effe.exe"
 
 jobs:
 
@@ -31,27 +40,9 @@ jobs:
           name: bridge-artifact
           path: ./
 
-      - name: Force incoming-only mode
+      - name: Patch hbb_common (solo in ingresso, server e chiave Emme Effe)
         shell: pwsh
-        run: |
-          $path = "libs/hbb_common/src/config.rs"
-          $content = Get-Content $path -Raw
-
-          $pattern = 'pub fn is_incoming_only\(\) -> bool \{.*?\n\}'
-          $replacement = @'
-          pub fn is_incoming_only() -> bool {
-              true
-          }
-          '@
-
-          $newContent = [regex]::Replace(
-              $content,
-              $pattern,
-              $replacement,
-              [System.Text.RegularExpressions.RegexOptions]::Singleline
-          )
-
-          Set-Content -Path $path -Value $newContent -Encoding UTF8
+        run: ./res/emmeeffe/patch_hbb_common.ps1
 
       - name: Install LLVM
         uses: KyleMayes/install-llvm-action@v2
@@ -134,6 +125,12 @@ jobs:
             "flutter/build/windows/x64/runner/Release" `
             "./rustdesk"
 
+          # Come nelle 1.5.x: exe principale con il nome Emme Effe (e copia rustdesk.exe),
+          # custom.txt firmato da Emme Effe accanto all'exe.
+          Copy-Item "./rustdesk/rustdesk.exe" "./rustdesk/$env:INNER_EXE"
+          Copy-Item "./res/emmeeffe/custom.txt" "./rustdesk/custom.txt"
+          Get-ChildItem ./rustdesk | Select-Object Name, Length
+
       - name: Build single portable EXE
         shell: bash
         run: |
@@ -144,23 +141,113 @@ jobs:
           python3 ./generate.py \
             -f ../../rustdesk/ \
             -o . \
-            -e ../../rustdesk/rustdesk.exe
+            -e "../../rustdesk/$INNER_EXE"
 
           cd ../..
 
-      - name: Prepare Emme Effe QuickSupport EXE
+      - name: Prepare Emme Effe EXE
         shell: pwsh
         run: |
-          $dst = "artifact"
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Copy-Item "target/release/rustdesk-portable-packer.exe" "artifact/EmmeEffe-Assistenza.exe"
 
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-
-          Copy-Item `
-            "target/release/rustdesk-portable-packer.exe" `
-            "$dst\rustdesk-host=pbxemmeeffe.dyndns.org,key=4WTIAYQnc4BddzGns6tfwJimRXsKlsKmOjjWHegNtns=.exe"
-
-      - name: Upload Emme Effe QuickSupport
+      - name: Upload Win10/11
         uses: actions/upload-artifact@v4
         with:
-          name: EmmeEffe-RustDesk-QuickSupport
+          name: win10
           path: artifact/*.exe
+
+  build-win7:
+    runs-on: windows-2022
+
+    steps:
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Patch hbb_common (solo in ingresso, server e chiave Emme Effe)
+        shell: pwsh
+        run: ./res/emmeeffe/patch_hbb_common.ps1
+
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # 1.75: con le versioni successive la Sciter non funziona (cambio ABI di i128)
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install RustDesk dependencies
+        shell: bash
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: |
+          "$VCPKG_ROOT/vcpkg" \
+            install \
+            --triplet x64-windows-static \
+            --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Build RustDesk (Sciter)
+        shell: bash
+        run: |
+          python3 res/inline-sciter.py
+          cargo build --locked --features inline,vram,hwcodec --release --bins
+          mkdir -p ./Release
+          cp ./target/release/rustdesk.exe "./Release/$INNER_EXE"
+          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x64/sciter.dll
+          cp ./res/emmeeffe/custom.txt ./Release/custom.txt
+          ls -la ./Release
+
+      - name: Build single portable EXE
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
+          cd libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../Release/ -o . -e "../../Release/$INNER_EXE"
+          cd ../..
+          mkdir -p artifact
+          cp target/release/rustdesk-portable-packer.exe artifact/EmmeEffe-Assistenza-Win7.exe
+
+      - name: Upload Win7
+        uses: actions/upload-artifact@v4
+        with:
+          name: win7
+          path: artifact/*.exe
+
+  bundle:
+    needs: [build-windows, build-win7]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Version and checksums
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          cd out
+          sha256sum *.exe | tee SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EmmeEffe-Assistenza-${{ env.VERSION }}
+          path: out/*

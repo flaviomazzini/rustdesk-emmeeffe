@@ -78,101 +78,218 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
-    final children = <Widget>[
-      if (!isOutgoingOnly) buildPresetPasswordWarning(),
-      if (bind.isCustomClient())
+
+    if (!isIncomingOnly) {
+      final children = <Widget>[
+        if (!isOutgoingOnly) buildPresetPasswordWarning(),
+        if (bind.isCustomClient())
+          Align(
+            alignment: Alignment.center,
+            child: loadPowered(context),
+          ),
         Align(
           alignment: Alignment.center,
-          child: loadPowered(context),
+          child: loadLogo(),
         ),
-      Align(
-        alignment: Alignment.center,
-        child: loadLogo(),
-      ),
-      buildTip(context),
-      if (!isOutgoingOnly) buildIDBoard(context),
-      if (!isOutgoingOnly) buildPasswordBoard(context),
-      FutureBuilder<Widget>(
-        future: Future.value(
-            Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
-        builder: (_, data) {
-          if (data.hasData) {
-            if (isIncomingOnly) {
-              if (isInHomePage()) {
-                Future.delayed(Duration(milliseconds: 300), () {
-                  _updateWindowSize();
-                });
-              }
-            }
-            return data.data!;
-          } else {
-            return const Offstage();
-          }
-        },
-      ),
-    ];
-    if (isIncomingOnly) {
-      children.addAll([
-        Divider(),
-        OnlineStatusWidget(
-          onSvcStatusChanged: () {
-            if (isInHomePage()) {
-              Future.delayed(Duration(milliseconds: 300), () {
-                _updateWindowSize();
-              });
+        buildTip(context),
+        if (!isOutgoingOnly) buildIDBoard(context),
+        if (!isOutgoingOnly) buildPasswordBoard(context),
+        FutureBuilder<Widget>(
+          future: Future.value(
+              Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
+          builder: (_, data) {
+            if (data.hasData) {
+              return data.data!;
+            } else {
+              return const Offstage();
             }
           },
-        ).marginOnly(bottom: 6, right: 6)
-      ]);
+        ),
+      ];
+
+      final textColor = Theme.of(context).textTheme.titleLarge?.color;
+
+      return ChangeNotifierProvider.value(
+        value: gFFI.serverModel,
+        child: Container(
+          width: 200.0,
+          color: Theme.of(context).colorScheme.background,
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  SingleChildScrollView(
+                    controller: _leftPaneScrollController,
+                    child: Column(
+                      key: _childKey,
+                      children: children,
+                    ),
+                  ),
+                  Expanded(child: Container())
+                ],
+              ),
+              if (isOutgoingOnly)
+                Positioned(
+                  bottom: 6,
+                  left: 12,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: InkWell(
+                      child: Obx(
+                        () => Icon(
+                          Icons.settings,
+                          color: _editHover.value
+                              ? textColor
+                              : Colors.grey.withOpacity(0.5),
+                          size: 22,
+                        ),
+                      ),
+                      onTap: () => {
+                        if (DesktopSettingPage.tabKeys.isNotEmpty)
+                          {
+                            DesktopSettingPage.switch2page(
+                                DesktopSettingPage.tabKeys[0])
+                          }
+                      },
+                      onHover: (value) => _editHover.value = value,
+                    ),
+                  ),
+                )
+            ],
+          ),
+        ),
+      );
     }
-    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+
+    const emmeBlue = Color(0xFF0071BD);
+    const emmeDarkBlue = Color(0xFF00528E);
+    const emmeBackground = Color(0xFFF5F8FA);
+
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: isIncomingOnly ? 280.0 : 200.0,
-        color: Theme.of(context).colorScheme.background,
-        child: Stack(
-          children: [
-            Column(
+        width: 380,
+        color: emmeBackground,
+        child: SingleChildScrollView(
+          controller: _leftPaneScrollController,
+          child: Container(
+            key: _childKey,
+            padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SingleChildScrollView(
-                  controller: _leftPaneScrollController,
-                  child: Column(
-                    key: _childKey,
-                    children: children,
+                Center(
+                  child: Image.asset(
+                    'assets/emmeeffe/logo_emme_effe.png',
+                    width: 210,
+                    fit: BoxFit.contain,
                   ),
                 ),
-                Expanded(child: Container())
-              ],
-            ),
-            if (isOutgoingOnly)
-              Positioned(
-                bottom: 6,
-                left: 12,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: InkWell(
-                    child: Obx(
-                      () => Icon(
-                        Icons.settings,
-                        color: _editHover.value
-                            ? textColor
-                            : Colors.grey.withOpacity(0.5),
-                        size: 22,
+                const SizedBox(height: 20),
+                const Text(
+                  'ASSISTENZA REMOTA',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: emmeDarkBlue,
+                    fontSize: 23,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  'Emme Effe Informatica',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: emmeBlue,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Comunica al tecnico il tuo ID e la password visualizzati qui sotto.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Color(0xFF5F6B73),
+                    fontSize: 12.5,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                buildIDBoard(context),
+                const SizedBox(height: 14),
+                buildPasswordBoard(context),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFC3D0DB),
+                    ),
+                  ),
+                  child: OnlineStatusWidget(
+                    onSvcStatusChanged: () {
+                      if (isInHomePage()) {
+                        Future.delayed(
+                          const Duration(milliseconds: 300),
+                          () {
+                            _updateWindowSize();
+                          },
+                        );
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  height: 42,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      SystemNavigator.pop();
+                      if (isWindows) {
+                        exit(0);
+                      }
+                    },
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                    ),
+                    label: const Text(
+                      'Esci',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    onTap: () => {
-                      if (DesktopSettingPage.tabKeys.isNotEmpty)
-                        {
-                          DesktopSettingPage.switch2page(
-                              DesktopSettingPage.tabKeys[0])
-                        }
-                    },
-                    onHover: (value) => _editHover.value = value,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: emmeBlue,
+                      side: const BorderSide(
+                        color: emmeBlue,
+                        width: 1.4,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
-              )
-          ],
+                const SizedBox(height: 6),
+                const Text(
+                  'Software di assistenza tecnica Emme Effe',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: Color(0xFF88949C),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -187,65 +304,69 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
+
+    const emmeBlue = Color(0xFF0071BD);
+    const emmeDarkBlue = Color(0xFF00528E);
+
     return Container(
-      margin: const EdgeInsets.only(left: 20, right: 11),
-      height: 57,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFC3D0DB),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 2,
-            decoration: const BoxDecoration(color: MyTheme.accent),
-          ).marginOnly(top: 5),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 7),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    height: 25,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          translate("ID"),
-                          style: TextStyle(
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .titleLarge
-                                  ?.color
-                                  ?.withOpacity(0.5)),
-                        ).marginOnly(top: 5),
-                        buildPopupMenu(context)
-                      ],
-                    ),
-                  ),
-                  Flexible(
-                    child: GestureDetector(
-                      onDoubleTap: () {
-                        Clipboard.setData(
-                            ClipboardData(text: model.serverId.text));
-                        showToast(translate("Copied"));
-                      },
-                      child: TextFormField(
-                        controller: model.serverId,
-                        readOnly: true,
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(top: 10, bottom: 10),
-                        ),
-                        style: TextStyle(
-                          fontSize: 22,
-                        ),
-                      ).workaroundFreezeLinuxMint(),
-                    ),
-                  )
-                ],
+          const Text(
+            'IL TUO ID',
+            style: TextStyle(
+              color: emmeBlue,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 7),
+          GestureDetector(
+            onDoubleTap: () {
+              Clipboard.setData(
+                ClipboardData(text: model.serverId.text),
+              );
+              showToast(translate("Copied"));
+            },
+            child: TextFormField(
+              controller: model.serverId,
+              readOnly: true,
+              textAlign: TextAlign.center,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
               ),
+              style: const TextStyle(
+                color: emmeDarkBlue,
+                fontSize: 30,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.3,
+              ),
+            ).workaroundFreezeLinuxMint(),
+          ),
+          const SizedBox(height: 3),
+          const Text(
+            'Fai doppio clic sul numero per copiarlo',
+            style: TextStyle(
+              color: Color(0xFF8A969E),
+              fontSize: 10.5,
             ),
           ),
         ],
@@ -290,95 +411,114 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildPasswordBoard2(BuildContext context, ServerModel model) {
     RxBool refreshHover = false.obs;
-    RxBool editHover = false.obs;
-    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+
     final showOneTime = model.approveMode != 'click' &&
         model.verificationMethod != kUsePermanentPassword;
+
+    const emmeBlue = Color(0xFF0071BD);
+    const emmeDarkBlue = Color(0xFF00528E);
+    const emmeOrange = Color(0xFFF4871D);
+
     return Container(
-      margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Container(
-            width: 2,
-            height: 52,
-            decoration: BoxDecoration(color: MyTheme.accent),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFC3D0DB),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 7),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AutoSizeText(
-                    translate("One-time Password"),
-                    style: TextStyle(
-                        fontSize: 14, color: textColor?.withOpacity(0.5)),
-                    maxLines: 1,
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onDoubleTap: () {
-                            if (showOneTime) {
-                              Clipboard.setData(
-                                  ClipboardData(text: model.serverPasswd.text));
-                              showToast(translate("Copied"));
-                            }
-                          },
-                          child: TextFormField(
-                            controller: model.serverPasswd,
-                            readOnly: true,
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding:
-                                  EdgeInsets.only(top: 14, bottom: 10),
-                            ),
-                            style: TextStyle(fontSize: 15),
-                          ).workaroundFreezeLinuxMint(),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'PASSWORD TEMPORANEA',
+            style: TextStyle(
+              color: emmeBlue,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onDoubleTap: () {
+                    if (showOneTime) {
+                      Clipboard.setData(
+                        ClipboardData(
+                          text: model.serverPasswd.text,
+                        ),
+                      );
+                      showToast(translate("Copied"));
+                    }
+                  },
+                  child: TextFormField(
+                    controller: model.serverPasswd,
+                    readOnly: true,
+                    textAlign: TextAlign.center,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: 5,
+                      ),
+                    ),
+                    style: const TextStyle(
+                      color: emmeDarkBlue,
+                      fontSize: 23,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ).workaroundFreezeLinuxMint(),
+                ),
+              ),
+              if (showOneTime)
+                Tooltip(
+                  message: 'Genera nuova password',
+                  child: AnimatedRotationWidget(
+                    onPressed: () {
+                      bind.mainUpdateTemporaryPassword();
+                    },
+                    onHover: (value) {
+                      refreshHover.value = value;
+                    },
+                    child: Obx(
+                      () => Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: refreshHover.value
+                              ? const Color(0xFFFFE9D1)
+                              : const Color(0xFFFFF4E8),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.refresh_rounded,
+                          color: emmeOrange,
+                          size: 21,
                         ),
                       ),
-                      if (showOneTime)
-                        AnimatedRotationWidget(
-                          onPressed: () => bind.mainUpdateTemporaryPassword(),
-                          child: Tooltip(
-                            message: translate('Refresh Password'),
-                            child: Obx(() => RotatedBox(
-                                quarterTurns: 2,
-                                child: Icon(
-                                  Icons.refresh,
-                                  color: refreshHover.value
-                                      ? textColor
-                                      : Color(0xFFDDDDDD),
-                                  size: 22,
-                                ))),
-                          ),
-                          onHover: (value) => refreshHover.value = value,
-                        ).marginOnly(right: 8, top: 4),
-                      if (!bind.isDisableSettings())
-                        InkWell(
-                          child: Tooltip(
-                            message: translate('Change Password'),
-                            child: Obx(
-                              () => Icon(
-                                Icons.edit,
-                                color: editHover.value
-                                    ? textColor
-                                    : Color(0xFFDDDDDD),
-                                size: 22,
-                              ).marginOnly(right: 8, top: 4),
-                            ),
-                          ),
-                          onTap: () => DesktopSettingPage.switch2page(
-                              SettingsTabKey.safety),
-                          onHover: (value) => editHover.value = value,
-                        ),
-                    ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          const Text(
+            'La password cambia automaticamente per maggiore sicurezza',
+            style: TextStyle(
+              color: Color(0xFF8A969E),
+              fontSize: 10.5,
             ),
           ),
         ],
@@ -554,19 +694,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     }
     if (bind.isIncomingOnly()) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: OutlinedButton(
-          onPressed: () {
-            SystemNavigator.pop(); // Close the application
-            // https://github.com/flutter/flutter/issues/66631
-            if (isWindows) {
-              exit(0);
-            }
-          },
-          child: Text(translate('Quit')),
-        ),
-      ).marginAll(14);
+      return const SizedBox.shrink();
     }
     return Container();
   }
