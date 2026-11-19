@@ -398,7 +398,8 @@ function Togli($nome, $cartella) {{
   Start-Sleep -Milliseconds 700
   $vecchio=Join-Path $cartella ((Split-Path $cartella -Leaf) + '.exe')
   if (Test-Path -LiteralPath $vecchio) {{
-    Start-Process -FilePath $vecchio -ArgumentList '--uninstall' -Wait -WindowStyle Hidden
+    $u=Start-Process -FilePath $vecchio -ArgumentList '--uninstall' -WindowStyle Hidden -PassThru
+    if ($u) {{ [void]$u.WaitForExit(120000) }}
     Start-Sleep -Milliseconds 700
   }}
   Get-Process | Where-Object {{ $_.Path -and $_.Path.StartsWith($cartella + '\', [StringComparison]::OrdinalIgnoreCase) }} | Stop-Process -Force
@@ -442,10 +443,14 @@ try {{
       }} | Remove-Item -Recurse -Force
     }}
   }}
-  $i=Start-Process -FilePath $nuovo -ArgumentList '--silent-install' -Wait -PassThru
+  # NON usare -Wait: in PowerShell 5.1 aspetta anche i processi figli (programma e icona avviati
+  # dall'installazione, che restano accesi) e il packer resterebbe bloccato con "Loading..." a schermo.
+  $i=Start-Process -FilePath $nuovo -ArgumentList '--silent-install' -PassThru
+  $null=$i.Handle
+  $finito=$i.WaitForExit(180000)
   Start-Sleep -Milliseconds 700
   Start-Service -Name $app -ErrorAction SilentlyContinue
-  exit $i.ExitCode
+  if ($finito) {{ exit $i.ExitCode }} else {{ exit 0 }}
 }} catch {{
   exit 1
 }}"#,
@@ -466,9 +471,10 @@ fn install_or_update_rustdesk_service(exe: &Path) -> bool {
     let interno = script_manutenzione(exe);
     let script = format!(
         "try {{ \
-             $p = Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -Wait -PassThru \
+             $p = Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -PassThru \
                  -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {enc}'; \
-             exit $p.ExitCode \
+             $null = $p.Handle; \
+             if ($p.WaitForExit(300000)) {{ exit $p.ExitCode }} else {{ exit 0 }} \
          }} catch {{ exit 1 }}",
         enc = ps_encoded(&interno),
     );
