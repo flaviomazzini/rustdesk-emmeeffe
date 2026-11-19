@@ -22,6 +22,9 @@ const META_LINE_PREFIX_FILE: &str = "file = ";
 const APP_PREFIX: &str = "rustdesk";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
+// Nome dell'app (hbb_common APP_NAME, patchato in build): servizio, Program Files\<nome>\<nome>.exe, configurazione.
+const EMMEEFFE_APP: &str = "Assistenza-Emme-Effe";
+
 const EMMEEFFE_APPNAME: &str =
     "rustdesk-host=pbxemmeeffe.dyndns.org,key=4WTIAYQnc4BddzGns6tfwJimRXsKlsKmOjjWHegNtns=.exe";
 
@@ -261,7 +264,7 @@ fn is_rustdesk_service_installed() -> bool {
     use std::os::windows::process::CommandExt;
 
     Command::new("sc.exe")
-        .args(["query", "RustDesk"])
+        .args(["query", EMMEEFFE_APP])
         .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -280,8 +283,8 @@ fn installed_rustdesk_exe() -> Option<PathBuf> {
     let program_files = std::env::var_os("ProgramFiles")?;
     Some(
         PathBuf::from(program_files)
-            .join("RustDesk")
-            .join("RustDesk.exe"),
+            .join(EMMEEFFE_APP)
+            .join(format!("{}.exe", EMMEEFFE_APP)),
     )
 }
 
@@ -323,7 +326,7 @@ fn start_rustdesk_service() {
     use std::os::windows::process::CommandExt;
 
     let _ = Command::new("sc.exe")
-        .args(["start", "RustDesk"])
+        .args(["start", EMMEEFFE_APP])
         .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -365,78 +368,90 @@ fn script_manutenzione(exe: &Path) -> String {
 
     //
     // Un'unica elevazione UAC (RunAs) esegue tutta la manutenzione.
-    // Se c'e' gia' un'installazione (servizio o cartella in Program Files), PULIZIA COMPLETA:
+    // Nome dell'app = Assistenza-Emme-Effe (come nelle 1.5.x): servizio, cartella in Program Files
+    // e configurazione hanno questo nome. Un RustDesk "normale" (servizio/cartelle RustDesk) NON va
+    // toccato: si toglie solo se e' la 1.6.0 sbagliata installata come "RustDesk" (riconoscibile perche'
+    // nella sua cartella c'e' Assistenza-Emme-Effe.exe, che RustDesk non ha mai).
+    // Se c'e' gia' un'installazione nostra, PULIZIA COMPLETA:
     // - ferma il servizio e disinstalla la vecchia versione (con il suo stesso exe, se c'e');
-    // - chiude i processi rimasti e cancella Program Files\RustDesk;
-    // - nelle cartelle di configurazione (utente e servizio) cancella tutto TRANNE config\RustDesk.toml
-    //   (ID e chiavi del PC: il cliente mantiene lo stesso ID e l'eventuale password permanente);
-    // - cancella le cartelle dei vecchi tentativi (Assistenza Emme Effe, Assistenza-Emme-Effe,
-    //   %LOCALAPPDATA%\rustdesk), MAI la cartella da cui stiamo lavorando adesso.
+    // - chiude i processi rimasti e cancella la cartella in Program Files;
+    // - nelle cartelle di configurazione (utente e servizio) cancella tutto TRANNE
+    //   config\Assistenza-Emme-Effe.toml (ID e chiavi del PC: il cliente mantiene lo stesso ID);
+    // - cancella i vecchi tentativi ("Assistenza Emme Effe" con gli spazi, %LOCALAPPDATA%\rustdesk-host=*),
+    //   MAI la cartella da cui stiamo lavorando adesso.
     // Poi installa la build appena estratta e avvia il servizio.
-    // RUSTDESK_APPNAME resta impostato anche nel processo elevato (server e chiave Emme Effe).
     // I percorsi dell'utente vengono passati da qui: l'utente elevato potrebbe essere un altro.
     //
 
     format!(
         r#"$ErrorActionPreference='SilentlyContinue'
 $env:{env_key}={app_name}
+$app={app}
 $nuovo={exe}
 $roaming={roaming}
 $local={local}
 $estratto={estratto}
-$pf=Join-Path $env:ProgramFiles 'RustDesk'
+function Togli($nome, $cartella) {{
+  $svc=Get-Service -Name $nome -ErrorAction SilentlyContinue
+  if (($null -eq $svc) -and !(Test-Path -LiteralPath $cartella)) {{ return }}
+  Stop-Service -Name $nome -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Milliseconds 700
+  $vecchio=Join-Path $cartella ((Split-Path $cartella -Leaf) + '.exe')
+  if (Test-Path -LiteralPath $vecchio) {{
+    Start-Process -FilePath $vecchio -ArgumentList '--uninstall' -Wait -WindowStyle Hidden
+    Start-Sleep -Milliseconds 700
+  }}
+  Get-Process | Where-Object {{ $_.Path -and $_.Path.StartsWith($cartella + '\', [StringComparison]::OrdinalIgnoreCase) }} | Stop-Process -Force
+  if ($null -ne (Get-Service -Name $nome -ErrorAction SilentlyContinue)) {{ sc.exe delete $nome | Out-Null; Start-Sleep -Milliseconds 700 }}
+  Remove-Item -LiteralPath $cartella -Recurse -Force
+}}
+function TieniSoloId($d, $toml) {{
+  if (Test-Path -LiteralPath $d) {{
+    Get-ChildItem -LiteralPath $d -Force | Where-Object {{ $_.Name -ne 'config' }} | Remove-Item -Recurse -Force
+    $c=Join-Path $d 'config'
+    if (Test-Path -LiteralPath $c) {{ Get-ChildItem -LiteralPath $c -Force | Where-Object {{ $_.Name -ne $toml }} | Remove-Item -Recurse -Force }}
+  }}
+}}
 try {{
-  $svc=Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
-  if (($null -ne $svc) -or (Test-Path -LiteralPath $pf)) {{
-    Stop-Service -Name 'RustDesk' -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 700
-    $vecchio=Join-Path $pf 'RustDesk.exe'
-    $dis=$nuovo
-    if (Test-Path -LiteralPath $vecchio) {{ $dis=$vecchio }}
-    Start-Process -FilePath $dis -ArgumentList '--uninstall' -Wait -WindowStyle Hidden
-    Start-Sleep -Milliseconds 700
-    Get-Process | Where-Object {{ $_.Path -and $_.Path.StartsWith($pf + '\', [StringComparison]::OrdinalIgnoreCase) }} | Stop-Process -Force
-    if ($null -ne (Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue)) {{ sc.exe delete RustDesk | Out-Null }}
-    Start-Sleep -Milliseconds 700
-    Remove-Item -LiteralPath $pf -Recurse -Force
-    $conf=@()
-    if ($roaming) {{ $conf+=(Join-Path $roaming 'RustDesk') }}
-    $conf+=(Join-Path $env:windir 'ServiceProfiles\LocalService\AppData\Roaming\RustDesk')
-    $conf+=(Join-Path $env:windir 'System32\config\systemprofile\AppData\Roaming\RustDesk')
-    foreach ($d in $conf) {{
-      if (Test-Path -LiteralPath $d) {{
-        Get-ChildItem -LiteralPath $d -Force | Where-Object {{ $_.Name -ne 'config' }} | Remove-Item -Recurse -Force
-        $c=Join-Path $d 'config'
-        if (Test-Path -LiteralPath $c) {{ Get-ChildItem -LiteralPath $c -Force | Where-Object {{ $_.Name -ne 'RustDesk.toml' }} | Remove-Item -Recurse -Force }}
+  $pf=Join-Path $env:ProgramFiles $app
+  $presente=$false
+  if ((Get-Service -Name $app -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath $pf)) {{ $presente=$true }}
+  Togli $app $pf
+  Togli 'Assistenza Emme Effe' (Join-Path $env:ProgramFiles 'Assistenza Emme Effe')
+  $rd=Join-Path $env:ProgramFiles 'RustDesk'
+  if (Test-Path -LiteralPath (Join-Path $rd ($app + '.exe'))) {{ Togli 'RustDesk' $rd }}
+  if ($presente) {{
+    $profili=@()
+    if ($roaming) {{ $profili+=$roaming }}
+    $profili+=(Join-Path $env:windir 'ServiceProfiles\LocalService\AppData\Roaming')
+    $profili+=(Join-Path $env:windir 'System32\config\systemprofile\AppData\Roaming')
+    foreach ($r in $profili) {{
+      $id=Join-Path $r ($app + '\config\' + $app + '.toml')
+      $v=Join-Path $r 'Assistenza Emme Effe'
+      $t=Join-Path $v 'config\Assistenza Emme Effe.toml'
+      if (!(Test-Path -LiteralPath $id) -and (Test-Path -LiteralPath $t)) {{
+        New-Item -ItemType Directory -Force -Path (Split-Path $id) | Out-Null
+        Copy-Item -LiteralPath $t -Destination $id -Force
       }}
-    }}
-    if ($roaming) {{
-      $id=Join-Path $roaming 'RustDesk\config\RustDesk.toml'
-      foreach ($n in @('Assistenza-Emme-Effe','Assistenza Emme Effe')) {{
-        $v=Join-Path $roaming $n
-        $t=Join-Path $v ('config\' + $n + '.toml')
-        if (!(Test-Path -LiteralPath $id) -and (Test-Path -LiteralPath $t)) {{
-          New-Item -ItemType Directory -Force -Path (Split-Path $id) | Out-Null
-          Copy-Item -LiteralPath $t -Destination $id -Force
-        }}
-        if (Test-Path -LiteralPath $v) {{ Remove-Item -LiteralPath $v -Recurse -Force }}
-      }}
+      if (Test-Path -LiteralPath $v) {{ Remove-Item -LiteralPath $v -Recurse -Force }}
+      TieniSoloId (Join-Path $r $app) ($app + '.toml')
     }}
     if ($local) {{
       Get-ChildItem -LiteralPath $local -Directory -Force | Where-Object {{
-        ($_.Name -eq 'rustdesk' -or $_.Name -like 'rustdesk-host=*') -and ($_.FullName.TrimEnd('\') -ne $estratto.TrimEnd('\'))
+        ($_.Name -like 'rustdesk-host=*') -and ($_.FullName.TrimEnd('\') -ne $estratto.TrimEnd('\'))
       }} | Remove-Item -Recurse -Force
     }}
   }}
   $i=Start-Process -FilePath $nuovo -ArgumentList '--silent-install' -Wait -PassThru
   Start-Sleep -Milliseconds 700
-  Start-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
+  Start-Service -Name $app -ErrorAction SilentlyContinue
   exit $i.ExitCode
 }} catch {{
   exit 1
 }}"#,
         env_key = APPNAME_RUNTIME_ENV_KEY,
         app_name = ps_quote(EMMEEFFE_APPNAME),
+        app = ps_quote(EMMEEFFE_APP),
         exe = ps_quote(&exe.to_string_lossy()),
         roaming = ps_quote(&roaming),
         local = ps_quote(&local),
@@ -857,7 +872,7 @@ mod emmeeffe_tests {
         // Con EMMEEFFE_SCRIPT_OUT impostata lo script viene salvato, per controllarlo con il parser di PowerShell.
         let s = script_manutenzione(Path::new(r"C:\Users\prova\AppData\Local\assistenza-emme-effe\Assistenza-Emme-Effe.exe"));
         assert!(s.contains("RUSTDESK_APPNAME"));
-        assert!(s.contains("'RustDesk.toml'"));
+        assert!(s.contains("$app='Assistenza-Emme-Effe'"));
         if let Ok(out) = std::env::var("EMMEEFFE_SCRIPT_OUT") {
             std::fs::write(out, &s).unwrap();
         }

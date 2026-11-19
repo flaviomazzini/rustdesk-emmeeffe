@@ -238,6 +238,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: out
+          pattern: win*
           merge-multiple: true
 
       - name: Version and checksums

@@ -1,6 +1,9 @@
 # EMME EFFE - modifiche al submodulo libs/hbb_common (codice di RustDesk, non nostro: si patcha al momento della build).
 #  - solo in ingresso: is_incoming_only() sempre true
 #  - server e chiave Emme Effe come predefiniti (come nelle 1.5.x compilate)
+#  - nome dell'app "Assistenza-Emme-Effe" (come nelle 1.5.x): da questo dipendono nome del servizio,
+#    Program Files\Assistenza-Emme-Effe, cartelle di configurazione e nome mostrato. Deve coincidere con
+#    EMMEEFFE_APP in libs/portable/src/main.rs.
 $ErrorActionPreference = "Stop"
 $path = "libs/hbb_common/src/config.rs"
 $c = [IO.File]::ReadAllText($path)
@@ -10,6 +13,7 @@ if ($n -eq $c) { throw "is_incoming_only() non trovata" }
 $c = $n
 
 $sostituzioni = @{
+  'pub static ref APP_NAME: RwLock<String> = RwLock::new("RustDesk".to_owned());' = 'pub static ref APP_NAME: RwLock<String> = RwLock::new("Assistenza-Emme-Effe".to_owned());'
   'pub const RENDEZVOUS_SERVERS: &[&str] = &["rs-ny.rustdesk.com"];' = 'pub const RENDEZVOUS_SERVERS: &[&str] = &["pbxemmeeffe.dyndns.org"];'
   'pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";' = 'pub const RS_PUB_KEY: &str = "4WTIAYQnc4BddzGns6tfwJimRXsKlsKmOjjWHegNtns=";'
 }
@@ -18,5 +22,5 @@ foreach ($k in $sostituzioni.Keys) {
   $c = $c.Replace($k, $sostituzioni[$k])
 }
 [IO.File]::WriteAllText($path, $c)
-Select-String -Path $path -Pattern 'RENDEZVOUS_SERVERS: |RS_PUB_KEY: ' | ForEach-Object { $_.Line }
+Select-String -Path $path -Pattern 'RENDEZVOUS_SERVERS: |RS_PUB_KEY: |static ref APP_NAME' | ForEach-Object { $_.Line }
 Select-String -Path $path -Pattern 'pub fn is_incoming_only' -Context 0,2 | ForEach-Object { $_.Line; $_.Context.PostContext }
